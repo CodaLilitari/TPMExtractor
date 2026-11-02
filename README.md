@@ -1,12 +1,17 @@
 # TPMExtractor (fork)
 
-> **Fork notice.** This is a fork of
-> [bahstrike/TPMExtractor](https://github.com/bahstrike/TPMExtractor) by Strike (Bad Ass Hackers,
-> 2021-2024), based on its commit `2cc75d6`. The fork no longer needs Windows to build (it is
-> tested on Linux and with MinGW for Windows), fixes crashes and parsing bugs, adds commands for
-> single files, and writes models and textures that retail Jedi Knight can load. The original
-> program's output is still available, byte for byte, with `--legacy`. This README was rewritten
-> for the fork in 2026; every change is listed in [CHANGES.md](CHANGES.md). The original
+> **Carrying on Strike's work.** TPMExtractor is Strike's tool
+> ([bahstrike/TPMExtractor](https://github.com/bahstrike/TPMExtractor), Bad Ass Hackers,
+> 2021-2024). His repository hasn't changed since he published it on 25 December 2024. This fork,
+> based on his commit `2cc75d6`, carries his work forward, with his credits kept as he wrote them.
+> Its changes are also offered to his repository as pull requests, in case he returns.
+>
+> The fork no longer needs Windows to build (it is tested on Linux and with MinGW for Windows),
+> fixes crashes and parsing bugs, adds commands for single files, and writes models and textures
+> that retail Jedi Knight can load. The original program's output is still available, byte for
+> byte, with `--legacy`. Downloads for Windows, Linux and macOS are on the
+> [Releases](https://github.com/CodaLilitari/TPMExtractor/releases) page. This README was
+> rewritten for the fork in 2026; every change is listed in [CHANGES.md](CHANGES.md). The original
 > description, credits and disclaimer are kept below.
 >
 > Fork improvements (2026): Andrei Kiralv/Darkahn, with Claude (Anthropic), Red in Andrei's
