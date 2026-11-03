@@ -272,8 +272,12 @@ behaviour and refuses it on the command line):
 ### Portability
 
 - Builds and runs on Linux (g++, clang) and builds for Windows (Visual Studio project, or
-  MinGW-w64 32/64-bit, statically linked: the `.exe` needs only KERNEL32 and msvcrt). All
-  operating-system calls are in `platform.cpp`.
+  MinGW-w64 32/64-bit, statically linked: the `.exe` needs only KERNEL32 and msvcrt) and for
+  macOS (Apple clang, or Zig on Linux; universal arm64 + x86_64, macOS 11+ on Apple silicon and
+  10.15+ on Intel). All operating-system calls are in `platform.cpp`.
+- The macOS program is not notarized: the README and `MACOS.txt` in the macOS package say how to
+  open it the first time (`xattr -d com.apple.quarantine tpmextractor`, or Finder's Open; on
+  macOS 15 and later "Open Anyway" in System Settings > Privacy & Security).
 - On-disk structures use fixed-width types, so 64-bit builds give the same output as the 32-bit
   original. (The original's structures assume 32-bit Windows: a 64-bit build of it misreads the
   keyframes, and on 64-bit Linux or macOS also the MAT and colormap headers.)
@@ -293,7 +297,20 @@ behaviour and refuses it on the command line):
 - Without CMake: `make` (`make check`, `make tests`, `make SANITIZE=1`, `make WERROR=1`,
   `make CXX=x86_64-w64-mingw32-g++ CC=x86_64-w64-mingw32-gcc` for Windows).
 - Visual Studio: `TPMExtractor.sln` as before; the project lists the fork's source files (not
-  built by the fork's maintainers, who had no Visual Studio).
+  built by the fork's maintainers, who had no Visual Studio; the GitHub Actions workflow builds it
+  as a check).
+- GitHub Actions (`.github/workflows/build-and-release.yml`): every push and pull request builds
+  natively on Linux (gcc, statically linked), Windows (Visual Studio 2022 through CMake, static
+  runtime, so the `.exe` needs no Visual C++ runtime DLLs) and macOS (Apple clang, universal
+  arm64 + x86_64, macOS 10.15+) and runs the synthetic tests on each; no game data is used. A
+  tag `v*` also publishes a GitHub Release with `TPMExtractor-fork-win64.zip`,
+  `TPMExtractor-fork-linux-x64.tar.gz`, `TPMExtractor-fork-macos-universal.zip` and
+  `SHA256SUMS.txt` (a pre-release when the tag has a `-` suffix).
+- `packaging/package.py` (Python 3, standard library) makes those packages from a built program,
+  for CI and for local release builds alike: it checks that the program is the expected kind
+  (64-bit Windows, 64-bit Linux, or universal macOS with arm64 and x86_64), adds `README.md`,
+  `LICENSE`, `NOTICE`, `CHANGES.md` (and `packaging/MACOS.txt` for macOS), and writes the same
+  bytes for the same inputs (fixed order, permissions, owner and `SOURCE_DATE_EPOCH` times).
 
 ### Tests
 
@@ -360,3 +377,5 @@ behaviour and refuses it on the command line):
 | new: `b3d_geom.*` | level geometry decoder and OBJ/MTL writer |
 | new: `tests/` | unit tests, end-to-end runner, fixture generator, fuzz targets |
 | new: `CMakeLists.txt`, `Makefile`, `cmake/*.cmake`, `.gitignore`, `CHANGES.md`, `NOTICE` | build files and documentation |
+| new: `packaging/package.py`, `packaging/MACOS.txt` | release packages |
+| new: `.github/workflows/build-and-release.yml` | builds, tests and releases on Linux, Windows and macOS |

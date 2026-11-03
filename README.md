@@ -6,11 +6,11 @@
 > based on his commit `2cc75d6`, carries his work forward, with his credits kept as he wrote them.
 > Its changes are also offered to his repository as pull requests, in case he returns.
 >
-> The fork no longer needs Windows to build (it is tested on Linux and with MinGW for Windows),
-> fixes crashes and parsing bugs, adds commands for single files, writes models and textures
-> that retail Jedi Knight can load, and exports the levels' geometry, which the original never
-> decoded, as OBJ models. The original program's output is still available, byte for byte, with
-> `--legacy`. Downloads for Windows, Linux and macOS are on the
+> The fork no longer needs Windows to build (it builds for Linux, Windows and macOS and is tested
+> on Linux), fixes crashes and parsing bugs, adds commands for single files, writes models and
+> textures that retail Jedi Knight can load, and exports the levels' geometry, which the original
+> never decoded, as OBJ models. The original program's output is still available, byte for byte,
+> with `--legacy`. Downloads for Windows, Linux and macOS are on the
 > [Releases](https://github.com/CodaLilitari/TPMExtractor/releases) page. This README was
 > rewritten for the fork in 2026; every change is listed in [CHANGES.md](CHANGES.md). The original
 > description, credits and disclaimer are kept below.
@@ -56,6 +56,12 @@ macOS file system works too:
 tpmextractor /media/cdrom ~/tpm-dump
 tpmextractor --legacy H: "c:/tpm dump legacy"
 ```
+
+**On macOS** the downloaded `tpmextractor` is not notarized by Apple, so macOS blocks it the first
+time. Run `xattr -d com.apple.quarantine tpmextractor` in Terminal in the folder you unzipped, or
+right-click it in Finder and choose **Open** (on macOS 15 and later: run it once, then click
+**Open Anyway** in System Settings > Privacy & Security). `MACOS.txt` in the download says the
+same.
 
 ### Commands
 
@@ -337,8 +343,9 @@ after the pixels where JK's loader reads it; the original left it out, and `--le
 The tool is C++17 with no dependencies; the `.Z` code (unshieldv3 and blast) is included.
 
 **Visual Studio (Windows).** Open `TPMExtractor.sln` (Visual Studio 2022, toolset v143) and build
-`Release`. The project lists every source file. The fork's maintainers had no Visual Studio, so
-this project file is not tested; the MinGW and CMake builds are.
+`Release`. The project lists every source file. The fork's maintainers had no Visual Studio; the
+GitHub Actions workflow (below) builds this project as a check, while its release build uses CMake
+with Visual Studio, which also builds the tests.
 
 **CMake (any system).**
 
@@ -365,12 +372,25 @@ make CXX=x86_64-w64-mingw32-g++ CC=x86_64-w64-mingw32-gcc        # Windows .exe,
 make CXX=clang++ CC=clang
 ```
 
-**macOS.** CMake or make with Apple's clang should work (the code has no platform-specific parts
-besides the small `platform.cpp`), but the fork's maintainers have not built it on a Mac.
+**macOS.** CMake or make with Apple's clang (the Xcode command-line tools). A universal program
+for Apple silicon (macOS 11 and later) and Intel (macOS 10.15 and later):
+
+```
+cmake -S . -B build/mac -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+cmake --build build/mac
+```
+
+Release builds for macOS are universal like this: built on a Mac by the GitHub Actions workflow,
+or cross-built on Linux with Zig (`python3 -m ziglang c++ -target aarch64-macos.11.0` and
+`-target x86_64-macos.10.15`, joined with `lipo -create`).
 
 The builds tested by the fork: g++ 13 and clang 18 on Linux (64-bit, and 32-bit static), MinGW-w64
-for 32-bit and 64-bit Windows, all with no warnings at `-Wall -Wextra`. The Windows executables
-were built but not run.
+for 32-bit and 64-bit Windows, and Zig for macOS (arm64 and x86_64), all with no warnings at
+`-Wall -Wextra`; the maintainers ran the tests on Linux only. The GitHub Actions workflow
+`.github/workflows/build-and-release.yml` builds natively on Linux (gcc, static), Windows (Visual
+Studio 2022, static runtime) and macOS (Apple clang, universal) and runs the tests on each, for
+every push and pull request; for a tag `v*` it also publishes a GitHub Release with the packages
+that `packaging/package.py` makes and their `SHA256SUMS.txt`.
 
 ### Tests
 

@@ -1,0 +1,20 @@
+TPMExtractor fork on macOS
+
+tpmextractor is a universal command-line program for Apple silicon and Intel Macs (macOS 11 or
+later on Apple silicon, 10.15 or later on Intel). It is not signed with a developer certificate
+or notarized by Apple, so macOS blocks it the first time you run a downloaded copy. Either:
+
+- in Terminal, in the folder you unzipped, remove the download mark:
+
+      xattr -d com.apple.quarantine tpmextractor
+
+- or, in Finder, right-click (Control-click) tpmextractor, choose Open, then Open again
+  (macOS 14 and earlier). On macOS 15 and later, run it once, then click "Open Anyway" in
+  System Settings > Privacy & Security.
+
+Then run it from Terminal, for example:
+
+    ./tpmextractor --help
+    ./tpmextractor /Volumes/TPM ~/tpm-dump
+
+No game data is included: you need your own copy of the game. See README.md.
