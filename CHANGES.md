@@ -312,7 +312,10 @@ behaviour and refuses it on the command line):
 - Unit tests: `unit_layer` (platform, BMP, reader, options), `unit_textout` (number formatting),
   `unit_jkout` (MAT and CMP encoders), `unit_b3d_decompress` (the level decoder), `unit_b3d_geom`
   (the geometry decoder and OBJ/MTL writer: number format, UV corner tables, normals and winding,
-  texture rules, LINK checks, error offsets of damaged levels, OBJ/MTL file names).
+  texture rules, LINK checks, error offsets of damaged levels, OBJ/MTL file names). `unit_layer`
+  passes on case-sensitive and case-insensitive file systems alike: on the latter (Windows, and
+  macOS by default) the file system finds another spelling of an existing name itself, and the
+  name-resolution functions keep the spelling asked for.
 - Level geometry: `make_fixtures.py` builds the specification's synthetic test vector (14 abstract
   polygons on a 5 x 3 grid with generated palettes and pixels, covering every UV mode, both
   texture rules, LINK entries, moving and hidden polygons and the special cases), pinned by

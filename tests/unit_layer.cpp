@@ -169,15 +169,19 @@ static void test_platform(const std::string& dir)
     CHECK(make_dir(d1 + "/") == MkdirResult::AlreadyExists);
     CHECK(make_dir(path_join(dir, "missing/child")) == MkdirResult::ParentMissing);
     CHECK(make_dirs(path_join(dir, "p/q/r")) && is_dir(path_join(dir, "p/q/r")));
-    // case-insensitive reuse, as on NTFS (on Windows the file system itself does this and the
-    // functions only join)
+    // case-insensitive reuse, as on NTFS. On a case-sensitive file system the functions find the
+    // stored spelling; on a case-insensitive one (Windows, and macOS by default) the file system
+    // itself resolves another spelling of the name, and the functions keep the spelling asked for.
     CHECK(write_file(path_join(d1, "BOX.MAT"), "x", 1));
-#ifndef _WIN32
-    CHECK(safe_output_path(d1, "box.mat", out, &why) && out == path_join(d1, "BOX.MAT"));
-    CHECK(resolve_ci(dir, "lvl/box.mat") == path_join(dir, "Lvl/BOX.MAT"));
-    CHECK(resolve_ci(dir, "LVL\\new.txt") == path_join(dir, "Lvl/new.txt"));
-    CHECK(find_ci(path_join(d1, "Box.Mat")) == path_join(d1, "BOX.MAT"));
-#endif
+    const bool fs_ignores_case = exists(path_join(d1, "box.mat"));
+    auto resolved = [&](const std::string& got, const std::string& asked, const std::string& stored) {
+        return got == (fs_ignores_case ? asked : stored);
+    };
+    CHECK(safe_output_path(d1, "box.mat", out, &why) &&
+          resolved(out, path_join(d1, "box.mat"), path_join(d1, "BOX.MAT")) && is_file(out));
+    CHECK(resolved(resolve_ci(dir, "lvl/box.mat"), path_join(dir, "lvl/box.mat"), path_join(dir, "Lvl/BOX.MAT")));
+    CHECK(resolved(resolve_ci(dir, "LVL\\new.txt"), path_join(dir, "LVL/new.txt"), path_join(dir, "Lvl/new.txt")));
+    CHECK(resolved(find_ci(path_join(d1, "Box.Mat")), path_join(d1, "Box.Mat"), path_join(d1, "BOX.MAT")));
     CHECK(find_ci(path_join(d1, "none.mat")) == path_join(d1, "none.mat"));
     CHECK(is_file(path_join(d1, "BOX.MAT")) && !is_dir(path_join(d1, "BOX.MAT")));
     uint64_t sz = 0;
