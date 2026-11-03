@@ -1,0 +1,253 @@
+# TPMExtractor fork - builds, tests and releases. Copyright 2026 the TPMExtractor fork
+# contributors. Licensed under the Apache License, Version 2.0 (see LICENSE). New file in the fork
+# (see CHANGES.md).
+#
+# Every push and pull request: native builds on Linux (gcc, statically linked), Windows (Visual
+# Studio 2022, MSVC with the static runtime) and macOS (Apple clang, universal arm64 + x86_64 for
+# macOS 10.15 and later), each running the synthetic test suite (the unit tests and
+# tests/run_tests.py on generated fixtures). No game data is used anywhere: TPM_DISC is never set,
+# so the real-data tests skip. Each build job uploads its package (packaging/package.py).
+#
+# A tag v* also creates a GitHub Release with the three packages and SHA256SUMS.txt, a pre-release
+# when the tag has a "-" suffix (v0.1.0-dev.2). It uses the workflow's own GITHUB_TOKEN.
+
+name: build-and-release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  CTEST_OUTPUT_ON_FAILURE: '1'
+
+jobs:
+  linux:
+    name: Linux (gcc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - name: Configure (static, warnings are errors)
+        run: >-
+          cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DTPMX_WERROR=ON
+          -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          "-DCMAKE_EXE_LINKER_FLAGS=-static -s"
+      - name: Build
+        run: cmake --build build/ci --parallel
+      - name: Test (synthetic fixtures only)
+        run: ctest --test-dir build/ci
+      - name: Visual Studio project lists every source file
+        run: make check-project-files
+      - name: Package
+        run: |
+          file build/ci/tpmextractor
+          build/ci/tpmextractor --version
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" python packaging/package.py linux-x64 build/ci/tpmextractor dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-linux-x64
+          path: dist/TPMExtractor-fork-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-linux
+          path: build/ci/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      # No -DTPMX_WERROR here yet: this is the first MSVC build of the fork's code. Its warnings
+      # are shown in the log; turn /WX on once a run has none.
+      - name: Configure (x64, static runtime)
+        run: >-
+          cmake -S . -B build/ci -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+      - name: Build
+        run: cmake --build build/ci --config Release --parallel
+      - name: Test (synthetic fixtures only)
+        run: ctest --test-dir build/ci -C Release
+      - name: Check that the program needs no Visual C++ runtime DLL
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          $deps = & $dumpbin.FullName /nologo /dependents build\ci\Release\tpmextractor.exe | Out-String
+          Write-Output $deps
+          if ($deps -match '(?i)(vcruntime|msvcp|ucrtbase|api-ms-win-crt)') { throw 'tpmextractor.exe needs the Visual C++ runtime DLLs' }
+      # The Visual Studio project (TPMExtractor.sln, Release|x86), built and run through the
+      # end-to-end tests as a check. It does not block a release, which uses the CMake build.
+      - name: Visual Studio project (a check)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          & "$vs\MSBuild\Current\Bin\MSBuild.exe" TPMExtractor.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=x86
+          if ($LASTEXITCODE -ne 0) { throw 'MSBuild failed on TPMExtractor.sln' }
+          $exe = Get-ChildItem -Path Release -Recurse -Filter TPMExtractor.exe | Select-Object -First 1
+          if (-not $exe) { throw 'MSBuild wrote no TPMExtractor.exe under Release' }
+          python -I tests/run_tests.py --suite synthetic --exe $exe.FullName --helper build/ci/tests/Release/unit_b3d_decompress.exe --work "$env:RUNNER_TEMP/vsproject"
+          if ($LASTEXITCODE -ne 0) { throw 'run_tests.py failed on the Visual Studio project build' }
+      - name: Package
+        run: |
+          build/ci/Release/tpmextractor.exe --version
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" python packaging/package.py win64 build/ci/Release/tpmextractor.exe dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-win64
+          path: dist/TPMExtractor-fork-win64.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-windows
+          path: build/ci/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  macos:
+    name: macOS (universal)
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - name: Configure (arm64 + x86_64, macOS 10.15+, warnings are errors)
+        run: >-
+          cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DTPMX_WERROR=ON
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+      - name: Build
+        run: cmake --build build/ci --parallel
+      - name: Check the universal program
+        run: |
+          lipo -info build/ci/tpmextractor
+          lipo build/ci/tpmextractor -verify_arch arm64 x86_64
+          for arch in arm64 x86_64; do
+            echo "$arch:"
+            otool -arch "$arch" -l build/ci/tpmextractor | grep -A4 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX' | grep -E 'minos|version' || true
+          done
+          codesign -dv --arch arm64 build/ci/tpmextractor 2>&1 || true
+      - name: Test (arm64; synthetic fixtures only)
+        run: ctest --test-dir build/ci
+      # The x86_64 slice is what Intel Macs run: its tests, under Rosetta 2 when the runner has it.
+      - name: Test the x86_64 slice under Rosetta 2
+        run: |
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "::notice::Rosetta 2 is not installed on this runner: the x86_64 slice was built but not run"
+            exit 0
+          fi
+          root="$PWD"
+          work="$RUNNER_TEMP/x86_64"
+          rm -rf "$work"
+          mkdir -p "$work/bin"
+          for prog in tpmextractor tests/unit_b3d_decompress; do
+            wrapper="$work/bin/$(basename "$prog")"
+            printf '#!/bin/sh\nexec arch -x86_64 "%s" "$@"\n' "$root/build/ci/$prog" > "$wrapper"
+            chmod +x "$wrapper"
+          done
+          for t in build/ci/tests/unit_*; do
+            [ -f "$t" ] && [ -x "$t" ] || continue
+            name="$(basename "$t")"
+            mkdir -p "$work/$name"
+            rc=0
+            TPMX_EXE="$work/bin/tpmextractor" TPMX_SOURCE_DIR="$root" TPMX_TEST_TMP="$work/$name" arch -x86_64 "$t" || rc=$?
+            if [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ]; then
+              echo "::error::$name failed on x86_64 (exit $rc)"
+              exit 1
+            fi
+          done
+          python -I tests/run_tests.py --suite synthetic --exe "$work/bin/tpmextractor" --helper "$work/bin/unit_b3d_decompress" --work "$work/run_tests"
+      - name: Package
+        run: |
+          build/ci/tpmextractor --version
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" python packaging/package.py macos-universal build/ci/tpmextractor dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-macos-universal
+          path: dist/TPMExtractor-fork-macos-universal.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-macos
+          path: build/ci/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS.txt
+        run: python3 packaging/package.py sums dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::warning::A release for $TAG exists already; its assets were left as they are"
+            exit 0
+          fi
+          cat > notes.md <<EOF
+          Builds of the TPMExtractor fork at ${GITHUB_SHA:0:7}, made and tested by GitHub Actions
+          with the synthetic test suite on each system.
+
+          - **Windows:** \`TPMExtractor-fork-win64.zip\` (64-bit; needs no extra DLLs)
+          - **Linux:** \`TPMExtractor-fork-linux-x64.tar.gz\` (x86-64, statically linked)
+          - **macOS:** \`TPMExtractor-fork-macos-universal.zip\` (Apple silicon and Intel). Not
+            notarized: see \`MACOS.txt\` inside, or run \`xattr -d com.apple.quarantine tpmextractor\`.
+          - \`SHA256SUMS.txt\`: the checksums of the three.
+
+          No game data is included: you need your own copy of the game. What changed: \`CHANGES.md\`,
+          also in each package.
+          EOF
+          prerelease=()
+          case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "TPMExtractor fork $TAG" --notes-file notes.md "${prerelease[@]}" \
+            dist/TPMExtractor-fork-win64.zip dist/TPMExtractor-fork-linux-x64.tar.gz \
+            dist/TPMExtractor-fork-macos-universal.zip dist/SHA256SUMS.txt
