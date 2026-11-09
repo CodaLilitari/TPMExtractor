@@ -302,10 +302,11 @@ behaviour and refuses it on the command line):
 - GitHub Actions (`.github/workflows/build-and-release.yml`): every push and pull request builds
   natively on Linux (gcc, statically linked), Windows (Visual Studio 2022 through CMake, static
   runtime, so the `.exe` needs no Visual C++ runtime DLLs) and macOS (Apple clang, universal
-  arm64 + x86_64, macOS 10.15+) and runs the synthetic tests on each; no game data is used. A
-  tag `v*` also publishes a GitHub Release with `TPMExtractor-fork-win64.zip`,
-  `TPMExtractor-fork-linux-x64.tar.gz`, `TPMExtractor-fork-macos-universal.zip` and
-  `SHA256SUMS.txt` (a pre-release when the tag has a `-` suffix).
+  arm64 + x86_64, macOS 10.15+), with warnings as errors on all three, and runs the synthetic
+  tests on each; no game data is used. A tag `v*` also publishes a GitHub Release with
+  `TPMExtractor-fork-win64.zip`, `TPMExtractor-fork-linux-x64.tar.gz`,
+  `TPMExtractor-fork-macos-universal.zip` and `SHA256SUMS.txt` (a pre-release when the tag has a
+  `-` suffix).
 - `packaging/package.py` (Python 3, standard library) makes those packages from a built program,
   for CI and for local release builds alike: it checks that the program is the expected kind
   (64-bit Windows, 64-bit Linux, or universal macOS with arm64 and x86_64), adds `README.md`,
